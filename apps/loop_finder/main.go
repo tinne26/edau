@@ -6,7 +6,6 @@ import "fmt"
 import "log"
 import "errors"
 import "strconv"
-import "strings"
 import "runtime"
 import "path/filepath"
 
@@ -15,17 +14,13 @@ import "image/color"
 
 import "github.com/hajimehoshi/ebiten/v2"
 import "github.com/hajimehoshi/ebiten/v2/audio"
-import "github.com/hajimehoshi/ebiten/v2/audio/wav"
-import "github.com/hajimehoshi/ebiten/v2/audio/mp3"
-import "github.com/hajimehoshi/ebiten/v2/audio/vorbis"
 import "github.com/hajimehoshi/ebiten/v2/ebitenutil"
 import "github.com/hajimehoshi/ebiten/v2/inpututil"
 
 import "github.com/tinne26/edau"
 
-// mp3 city memories: sample 1250 to 6.380.544
-// ogg city memories: sample 1260 to 6.380.484
-
+// note: directX still has some issues that prevent this
+//       example from performing reasonably
 func init() {
 	if runtime.GOOS == "windows" {
 		os.Setenv("EBITEN_GRAPHICS_LIBRARY", "opengl")
@@ -335,43 +330,13 @@ func main() {
 	filename, err := filepath.Abs(os.Args[1])
 	if err != nil { log.Fatal(err) }
 	
-	// determine audio format and open file
-	audioFormat := ""
-	if strings.HasSuffix(filename, ".ogg") {
-		audioFormat = "ogg"
-	} else if strings.HasSuffix(filename, ".wav") {
-		audioFormat = "wav"
-	} else if strings.HasSuffix(filename, ".mp3") {
-		audioFormat = "mp3"
-	} else {
-		fmt.Print("Invalid audio file format. Expected .ogg, .wav or .mp3 extension.\n")
-		os.Exit(1)
-	}
-	file, err := os.Open(filename)
-	if err != nil { log.Fatal(err) }
-	defer file.Close()
-
 	// open stream
-	type ebitenStream interface {
-		io.ReadSeeker
-		Length() int64
-	}
-	var stream ebitenStream
-	switch audioFormat {
-	case "ogg":
-		stream, err = vorbis.DecodeWithSampleRate(SampleRate, file)
-	case "mp3":
-		stream, err = mp3.DecodeWithSampleRate(SampleRate, file)
-	case "wav":
-		stream, err = wav.DecodeWithSampleRate(SampleRate, file)
-	default:
-		panic("code fault")
-	}
+	audio.NewContext(SampleRate) // retrieved later with audio.CurrentContext()
+	stream, err := edau.LoadAudioFileAsStream(filename)
 	if err != nil { log.Fatal(err) }
 	looper := edau.NewLooper(stream, 0, stream.Length())
 
 	// create "game" and start program
-	audio.NewContext(SampleRate) // retrieved later with audio.CurrentContext()
 	game := &Game{ looper: looper, filename: filepath.Base(filename) }
 	game.refreshViewBuffers()
 	ebiten.SetWindowSize(680, 480)
