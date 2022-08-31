@@ -1,0 +1,4 @@
+# folders to ignore
+wip/
+test_files/
+aux_files/
