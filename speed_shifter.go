@@ -9,8 +9,11 @@ import "io"
 import "math"
 import "sync"
 
-// A valid SpeedShifter can only be created through the [NewDefaultSpeedShifter] or 
-// [NewSpeedShifter] functions.
+// A SpeedShifter wraps an audio stream and allows playing it at a different
+// speed than the original by resampling in real-time.
+//
+// Valid speed shifters can only be created through [NewDefaultSpeedShifter]
+// or [NewSpeedShifter].
 type SpeedShifter struct {
 	mutex sync.Mutex
 	source io.Reader
@@ -19,20 +22,28 @@ type SpeedShifter struct {
 	interpolator InterpolatorFunc
 
 	fracPos float64
-	leftoverSamples  int // from previous reads, not consumed yet
-	lookaheadSamples int // lookahead bytes ready for interpolation
+	leftoverBytes  int // from previous reads, not consumed yet
+	lookaheadBytes int // lookahead bytes ready for interpolation
 	
 	leftWindow  circularWindow
 	rightWindow circularWindow
 	auxReadBuffer []byte
 }
 
-// Creates a default SpeedShifter.
+// Creates a default [SpeedShifter], which uses a 6-point Hermite interpolator for the 
+// resampling. For custom interpolators, see [NewSpeedShifter] instead.
+//
+// The initial playback speed is 1.0.
 func NewDefaultSpeedShifter(source io.Reader) *SpeedShifter {
 	// Parameters are source, initial speed, window size and interpolator function.
 	return NewSpeedShifter(source, 1.0, 6, InterpHermite6Pt3Ord)
 }
 
+// Creates a new [SpeedShifter] with a custom speed, window size and interpolator. If
+// you do not want to worry about interpolators and resampling, see [NewDefaultSpeedShifter]
+// instead.
+//
+// The interpolator's windowSize must be multiple of 2.
 func NewSpeedShifter(source io.Reader, speed float64, windowSize int, interpolator InterpolatorFunc) *SpeedShifter {
 	if windowSize < 2 {
 		panic("NewSpeedShifter windowSize must be at least 2")
@@ -60,6 +71,7 @@ func NewSpeedShifter(source io.Reader, speed float64, windowSize int, interpolat
 	return shifter
 }
 
+// Returns the currently configured playback speed.
 func (self *SpeedShifter) Speed() float64 {
 	self.mutex.Lock()
 	speed := self.speed
@@ -67,13 +79,25 @@ func (self *SpeedShifter) Speed() float64 {
 	return speed
 }
 
+// Sets the playback speed. Notice that the Ebitengine's player buffer size
+// can cause the change to take a while to become audible. See Ebitengine's
+// [Player.SetBufferSize] if you want to reduce latency. 20 milliseconds are
+// reasonable for most desktop environments, while browsers often have trouble
+// when pushed below 50 milliseconds. It also depends a lot on how much processing
+// and effects you are adding to the audio.
+//
+// [Player.SetBufferSize]: https://pkg.go.dev/github.com/hajimehoshi/ebiten/v2/audio#Player.SetBufferSize
 func (self *SpeedShifter) SetSpeed(speed float64) {
 	self.mutex.Lock()
 	self.speed = speed
 	self.mutex.Unlock()
 }
 
-// Implements io.Reader. This method tries to fill the buffer as much as possible.
+// Implements [io.Reader]. This function will always try to fill the buffer as much
+// as possible, even if this requires multiple reads on the underlying stream.
+//
+// The returned read length will always also be multiple of 4, aligning to Ebitengine's
+// sample size.
 func (self *SpeedShifter) Read(buffer []byte) (int, error) {
 	// do not read incomplete samples (always read a number of bytes multiple of 4)
 	buffer = buffer[0 : len(buffer) - (len(buffer) & 0b11)]
@@ -101,14 +125,15 @@ func (self *SpeedShifter) singleRead(buffer []byte) (int, error) {
 	if len(buffer) == 0 { return 0, nil }
 
 	// general case
-	requiredLookahead := self.windowSize/2
-	pendingLookahead  := requiredLookahead - self.lookaheadSamples
-	readCompensation  := (pendingLookahead << 2) - (self.leftoverSamples << 2)
-	bytesToRead := int(math.Ceil(float64(len(buffer))*self.speed + float64(readCompensation)))
-	bytesToRead += bytesToRead & 0b11 // align to sample size
+	requiredLookahead := (self.windowSize << 1) // *4/2
+	pendingLookahead  := requiredLookahead - self.lookaheadBytes
+	readCompensation  := pendingLookahead  - self.leftoverBytes
+	samplesRequired   := math.Ceil((float64(len(buffer))*self.speed)/4.0) // ceil needs to be applied on samples
+	bytesToRead := int(samplesRequired*4.0 + float64(readCompensation))
+	if bytesToRead <= 0 { panic("unexpected situation") }
 
 	// acquire aux buffer for reading
-	minReadBufferSize := (self.leftoverSamples << 2) + bytesToRead
+	minReadBufferSize := self.leftoverBytes + bytesToRead
 	var readBuffer []byte
 	if len(self.auxReadBuffer) < minReadBufferSize {
 		if cap(self.auxReadBuffer) >= minReadBufferSize {
@@ -120,38 +145,40 @@ func (self *SpeedShifter) singleRead(buffer []byte) (int, error) {
 		readBuffer = self.auxReadBuffer[0 : minReadBufferSize]
 	}
 
-	// copy leftoverSamples to the start of the buffer
-	leftoverBytes := (self.leftoverSamples << 2)
-	if self.leftoverSamples > 0 {
-		copy(readBuffer[:], self.auxReadBuffer[len(self.auxReadBuffer) - leftoverBytes : ])
+	// copy leftoverBytes to the start of the buffer
+	if self.leftoverBytes > 0 {
+		copy(readBuffer[:], self.auxReadBuffer[len(self.auxReadBuffer) - self.leftoverBytes : ])
 	}
 
 	// read from underlying source
 	var srcBytesRead int
 	var err error
 	if bytesToRead > 0 {
-		srcBytesRead, err = self.source.Read(readBuffer[leftoverBytes : ])
+		srcBytesRead, err = self.source.Read(readBuffer[self.leftoverBytes : ])
 	}
-	srcBytesRead += leftoverBytes
+	srcBytesRead += self.leftoverBytes
 	readBuffer = readBuffer[0 : srcBytesRead]
 
 	// set read buffer as self.auxReadBuffer for next iterations
 	self.auxReadBuffer = readBuffer
 
 	// ensure lookahead is properly set
-	for self.lookaheadSamples < self.windowSize/2 {
-		if len(readBuffer) == 0 { return 0, err }
+	for self.lookaheadBytes < (self.windowSize << 1) {
+		if len(readBuffer) < 4 {
+			self.leftoverBytes = len(readBuffer)
+			return 0, err
+		}
 		left, right := GetSampleAsI16(readBuffer)
 		self.leftWindow.Push(float64(left))
 		self.rightWindow.Push(float64(right))
-		self.lookaheadSamples += 1
+		self.lookaheadBytes += 4
 		readBuffer = readBuffer[4 : ]
 	}
 
 	// process the bytes
 	bytesServed := 0
 	interpPosBase := float64(self.windowSize/2 - 1)
-	for len(readBuffer) > 0 && bytesServed < len(buffer) {
+	for len(readBuffer) >= 4 && bytesServed < len(buffer) {
 		// add sample
 		if self.fracPos < 1.0 {
 			left  := self.interpolator(self.leftWindow.Get(),  interpPosBase + self.fracPos)
@@ -162,7 +189,7 @@ func (self *SpeedShifter) singleRead(buffer []byte) (int, error) {
 		}
 
 		// advance position
-		for self.fracPos >= 1.0 && len(readBuffer) > 0 {
+		for self.fracPos >= 1.0 && len(readBuffer) >= 4 {
 			left, right := GetSampleAsI16(readBuffer)
 			self.leftWindow.Push(float64(left))
 			self.rightWindow.Push(float64(right))
@@ -171,21 +198,28 @@ func (self *SpeedShifter) singleRead(buffer []byte) (int, error) {
 		}
 	}
 	
-	// update leftover samples
-	if (srcBytesRead - bytesServed) & 0b11 != 0 { panic("unexpected situation") }
-	self.leftoverSamples = (len(readBuffer) >> 2)
-	if self.leftoverSamples < 0 { panic("unexpected situation") }
+	// update leftover bytes
+	// if (srcBytesRead - bytesServed) & 0b11 != 0 {
+	// 	copy(readBuffer[:], self.auxReadBuffer[len(self.auxReadBuffer) - self.leftoverBytes : ])
+	// 	panic("unexpected situation")
+	// }
+	self.leftoverBytes = len(readBuffer)
+	if self.leftoverBytes < 0 { panic("unexpected situation") }
 
 	// return
 	return bytesServed, err
 }
 
+// Implements [io.Seeker], with the limitation that io.SeekCurrent seeks
+// are not supported (unless the seek has an offset of 0, which is sometimes
+// used to get the current playback position).
+//
 // You may use Seek to rewind and start playing after stoping, but not to loop
 // or do seamless seeking with the resampled stream itself. Seamless seeking
 // could only be done correctly if notifying the seek in advance of the
-// interpolation window. That's not something anyone wants to deal with, so seeking
-// will seek on the underlying buffer but reset the internal interpolation window
-// of the speed shifter.
+// interpolation window. That's not something anyone sane wants to figure out, so
+// seeking will seek on the underlying buffer but reset the internal interpolation
+// window of the speed shifter.
 //
 // This method panics if the underlying source doesn't implement [io.Seeker].
 func (self *SpeedShifter) Seek(offset int64, whence int) (int64, error) {
@@ -208,10 +242,10 @@ func (self *SpeedShifter) Seek(offset int64, whence int) (int64, error) {
 	return position, err
 }
 
-// Resets interpolation window and related state.
+// Resets the interpolation window and related state.
 func (self *SpeedShifter) internalReset() {
-	self.leftoverSamples  = 0
-	self.lookaheadSamples = 0
+	self.leftoverBytes  = 0
+	self.lookaheadBytes = 0
 	self.leftWindow.Reset()
 	self.rightWindow.Reset()
 	for i := 0; i < self.windowSize/2 - 1; i++ {
