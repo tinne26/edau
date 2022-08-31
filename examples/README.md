@@ -1,6 +1,6 @@
-# EDAU Examples
+# edau examples
 
-A collection of examples using the edau package.
+A collection of examples using the **edau** package.
 
 Speed shifter interactive example:
 ```

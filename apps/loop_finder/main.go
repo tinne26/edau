@@ -32,6 +32,9 @@ func init() {
 // as an argument, which must be .ogg, .wav or .mp3 and have a sample rate
 // of 44.1kHz (this can easily be changed in the code below, but I didn't
 // set it as a program parameter).
+//
+// Notice that mp3's have padding at the start and the end that may hinder
+// your attempts to find loop points on other programs (like DAWs).
 const SampleRate = 44100 // only 44100 or 48000 expected
 const PlaybackPreMillis = 2300 // must end with two zeros
 const SampleSize = 4 // this must not be changed, it's for clarity in code
@@ -342,5 +345,8 @@ func main() {
 	ebiten.SetWindowSize(680, 480)
 	ebiten.SetWindowTitle("edau loop finder")
 	err = ebiten.RunGame(game)
+	if err != nil { log.Fatal(err) }
+
+	err = stream.(io.Closer).Close()
 	if err != nil { log.Fatal(err) }
 }

@@ -62,12 +62,6 @@ func main() {
 	ctx := audio.NewContext(44100)
 	stream, err := edau.LoadAudioFileAsStream(os.Args[1])
 	if err != nil { log.Fatal(err) }
-	defer func() {
-		err := stream.(io.Closer).Close()
-		if err != nil {
-			log.Printf("stream.Close() error: %s", err.Error())
-		}
-	}()
 
 	// create speed shifter and start playing audio
 	shifter := edau.NewDefaultSpeedShifter(stream)
@@ -79,5 +73,8 @@ func main() {
 
 	// start the game, which allows modifying the playback speed
 	err = ebiten.RunGame(&Game{ audioSrc: shifter, speed: 1.0 })
+	if err != nil { log.Fatal(err) }
+
+	err = stream.(io.Closer).Close()
 	if err != nil { log.Fatal(err) }
 }

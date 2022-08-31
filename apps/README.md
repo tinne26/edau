@@ -1,6 +1,6 @@
-# EDAU Apps
+# edau applications
 
-A collection of apps and tools related to audio.
+A collection of applications and tools related to **edau** and audio manipulation and analysis in general.
 
 Loop point finder assistant:
 ```

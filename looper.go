@@ -4,8 +4,11 @@ import "io"
 import "sync"
 import "bytes"
 
-
-
+// A tight audio looper. Unlike Ebitengine's [infinite looper], this looper doesn't require padding
+// after the end point because it doesn't perform any blending during the transition. Additionally,
+// the start and end points can be changed at any time with [Looper.AdjustLoop].
+//
+// [infinite looper]: https://pkg.go.dev/github.com/hajimehoshi/ebiten/v2/audio#InfiniteLoop
 type Looper struct {
 	stream io.ReadSeeker
 	mutex sync.Mutex
@@ -18,14 +21,19 @@ type Looper struct {
 	loopEnd int64
 }
 
-// The stream must be a L16 little-endian stream with two channels. This means
-// 2 channels per sample, with 2 bytes for the left channel of the sample, and
-// 2 more for the right channel. This also implies that loopStart and loopEnd
-// must be multiples of 4. Finally, loopStart must be strictly smaller than
-// loopEnd. This method will panic if any of those are not respected.
+// Creates a new tight [Looper].
 //
-// The loopEnd is not reached. For example, to play a full stream in a loop,
-// you would use NewLooper(stream, 0, stream.Length()).
+// The stream must be a L16 little-endian stream with two channels (Ebitengine's
+// default audio format). loopStart and loopEnd must be multiples of 4, and loopStart
+// must be strictly smaller than loopEnd. This method will panic if any of those are
+// not respected.
+//
+// The loopEnd point is not itself included in the loop. For example, to play a full
+// audio stream in a loop, you would use NewLooper(stream, 0, stream.Length()).
+//
+// If you need help to determine the loop start and end points, see [apps/loop_finder].
+//
+// [apps/loop_finder]: https://github.com/tinne26/edau/tree/main/apps
 func NewLooper(stream io.ReadSeeker, loopStart int64, loopEnd int64) *Looper {
 	assertLoopValuesValidity(loopStart, loopEnd)
 	return &Looper {
@@ -36,6 +44,7 @@ func NewLooper(stream io.ReadSeeker, loopStart int64, loopEnd int64) *Looper {
 	}
 }
 
+// Implements [io.Reader].
 func (self *Looper) Read(buffer []byte) (int, error) {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
@@ -88,7 +97,7 @@ func (self *Looper) readAll(buffer []byte) (int, error) {
 
 // Seek seeks directly on the underlying stream. It is the caller's 
 // responsibility to make sure the seek falls inside the current loop
-// if that's desired.
+// (if that's desired).
 func (self *Looper) Seek(offset int64, whence int) (int64, error) {
 	self.mutex.Lock()
 	n, err := self.stream.Seek(offset, whence)
@@ -100,6 +109,8 @@ func (self *Looper) Seek(offset int64, whence int) (int64, error) {
 	return n, err
 }
 
+// Returns the current playback position. The value will always be multiple
+// of 4, as in Ebitengine each sample is composed of 4 bytes.
 func (self *Looper) GetPosition() int64 {
 	self.mutex.Lock()
 	position := self.position
@@ -107,6 +118,7 @@ func (self *Looper) GetPosition() int64 {
 	return position
 }
 
+// Returns the currently configured loop starting point (in bytes, not samples).
 func (self *Looper) GetLoopStart() int64 {
 	self.mutex.Lock()
 	loopStart := self.loopStart
@@ -114,6 +126,7 @@ func (self *Looper) GetLoopStart() int64 {
 	return loopStart
 }
 
+// Returns the currently configured loop ending point (in bytes, not samples).
 func (self *Looper) GetLoopEnd() int64 {
 	self.mutex.Lock()
 	loopEnd := self.loopEnd
@@ -121,6 +134,7 @@ func (self *Looper) GetLoopEnd() int64 {
 	return loopEnd
 }
 
+// Like [Looper.GetLoopStart] and [Looper.GetLoopEnd], but both at once.
 func (self *Looper) GetLoopPoints() (int64, int64) {
 	self.mutex.Lock()
 	loopStart := self.loopStart
@@ -129,6 +143,13 @@ func (self *Looper) GetLoopPoints() (int64, int64) {
 	return loopStart, loopEnd
 }
 
+// Sets new values for the loop starting and ending points. The values are
+// []byte indices. Therefore, since Ebitengine audio samples require 4 bytes
+// each, the passed start and end points must also be multiples of 4.
+//
+// If the new loop end is set before the current playback position, the loop
+// will continue playing until the previously configured end point before
+// the new loop comes into effect.
 func (self *Looper) AdjustLoop(loopStart, loopEnd int64) {
 	assertLoopValuesValidity(loopStart, loopEnd)
 	self.mutex.Lock()
@@ -141,8 +162,8 @@ func (self *Looper) AdjustLoop(loopStart, loopEnd int64) {
 }
 
 // Returns the underlying stream's length. The underlying stream must
-// have a Length() int64 method or be a bytes.Reader with Len() int.
-// Otherwise this method will panic.
+// have a Length() int64 method or be a [bytes.Reader]. This method
+// will panic otherwise.
 func (self *Looper) Length() int64 {
 	self.mutex.Lock()
 	var length int64

@@ -17,6 +17,9 @@ type StdAudioStream interface {
 	Length() int64
 }
 
+// Returned by functions that require Ebitengine's audio.NewContext to have
+// already been created, typically so the sample rate can be directly obtained
+// from it with audio.CurrentContext().SampleRate().
 var ErrAudioContextUninitialized = errors.New("Ebitengine's audio context not initialized")
 
 // Loads an .ogg, .mp3 or .wav file as a [StdAudioStream]. Additionally,
@@ -25,7 +28,7 @@ var ErrAudioContextUninitialized = errors.New("Ebitengine's audio context not in
 //    err := audioStream.(io.Closer).Close()
 // The sample rate used is taken from Ebitengine's audio.CurrentContext().
 // If no audio context has been initialized, [ErrAudioContextUninitialized]
-// is returned.
+// will be returned.
 func LoadAudioFileAsStream(filename string) (StdAudioStream, error) {
 	ctx := audio.CurrentContext()
 	if ctx == nil { return nil, ErrAudioContextUninitialized }
