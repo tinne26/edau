@@ -38,10 +38,10 @@ func InterpLagrangeN(samples []float64, targetPosition float64) float64 {
 }
 
 // 4-point, 3rd-order Lagrange interpolation. Samples are considered to start at zero.
-// x is the position at which we want to interpolate. For best results, x must be
-// reasonably close to len(samples)/2.
+// x is the position at which we want to interpolate. For best results, x should be
+// between 1.0 and 2.0.
 //
-// len(samples) must be exactly 4.
+// len(samples) must be at least 4.
 func InterpLagrange4Pt3Ord(samples []float64, x float64) float64 {
 	c0 := samples[1]
 	c1 := samples[2] - 1.0/3.0*samples[0] - 0.5*samples[1] - 1.0/6.0*samples[3]
@@ -59,10 +59,10 @@ func InterpLagrange4Pt3Ord(samples []float64, x float64) float64 {
 }
 
 // 6-point, 5th-order Lagrange interpolation. Samples are considered to start at zero.
-// x is the position at which we want to interpolate. For best results, x must be
-// reasonably close to len(samples)/2.
+// x is the position at which we want to interpolate. For best results, x should be
+// between 2.0 and 3.0.
 //
-// len(samples) must be exactly 6.
+// len(samples) must be at least 6.
 func InterpLagrange6Pt5Ord(samples []float64, x float64) float64 {
 	// precomputed values for some recurrent matrix values
 	sam_1_3_pre := samples[1] + samples[3]
@@ -81,10 +81,10 @@ func InterpLagrange6Pt5Ord(samples []float64, x float64) float64 {
 }
 
 // 4-point, 3rd-order Hermite interpolation. Samples are considered to start at zero.
-// x is the position at which we want to interpolate. For best results, x must be
-// reasonably close to len(samples)/2.
+// x is the position at which we want to interpolate. For best results, x should be
+// between 1.0 and 2.0.
 //
-// len(samples) must be exactly 4.
+// len(samples) must be at least 4.
 func InterpHermite4Pt3Ord(samples []float64, x float64) float64 {
 	c0 := samples[1]
 	c1 := 0.5*(samples[2] - samples[0])
@@ -95,10 +95,10 @@ func InterpHermite4Pt3Ord(samples []float64, x float64) float64 {
 }
 
 // 6-point, 3rd-order Hermite interpolation. Samples are considered to start at zero.
-// x is the position at which we want to interpolate. For best results, x must be
-// reasonably close to len(samples)/2.
+// x is the position at which we want to interpolate. For best results, x should be
+// between 2.0 and 3.0.
 //
-// len(samples) must be exactly 6.
+// len(samples) must be at least 6.
 func InterpHermite6Pt3Ord(samples []float64, x float64) float64 {
 	c0 := samples[2]
 	c1 := 1.0/12.0*(samples[0] - samples[4]) + 2.0/3.0*(samples[3] - samples[1])
