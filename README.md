@@ -1,15 +1,15 @@
 # edau
 [![Go Reference](https://pkg.go.dev/badge/github.com/tinne26/edau.svg)](https://pkg.go.dev/github.com/tinne26/edau)
 
-**WARNING**: discussions on Ebitengine's discord lead me to publish this earlier than intended. Don't expect much yet.
+**WARNING**: discussions on Ebitengine's discord led me to publish this earlier than intended. Don't expect much yet.
 
 **edau** stands for *Ebitengine Digital Audio Utils*. As the name implies, it's a collection of types, interfaces and utilities to work with audio on [Ebitengine](https://github.com/hajimehoshi/ebiten), the game engine written in Golang by [Hajime Hoshi](https://github.com/hajimehoshi).
 
 This is currently a loosely scoped, exploratory project for personal use mostly. If any of its parts end up evolving into something bigger, I may separate them into a more focused repository.
 
 Current utilities include:
-- [SpeedShifter](https://pkg.go.dev/github.com/tinne26/edau#SpeedShifter), which can be used to play audio at different speeds, and a few different interpolator functions.
-- A tight [Looper](https://pkg.go.dev/github.com/tinne26/edau#Looper) that unlike Ebitengine's [InfiniteLoop](https://pkg.go.dev/github.com/hajimehoshi/ebiten/v2/audio#InfiniteLoop) doesn't do any fading between end and start loop points nor requires any padding after the end loop point. See also [apps/loop_points](https://github.com/tinne26/edau/tree/main/apps) for a loop point finder utility.
+- [SpeedShifter](https://pkg.go.dev/github.com/tinne26/edau#SpeedShifter), which can be used to play audio at different speeds, with a few interpolation functions available.
+- A tight [Looper](https://pkg.go.dev/github.com/tinne26/edau#Looper) that unlike Ebitengine's [InfiniteLoop](https://pkg.go.dev/github.com/hajimehoshi/ebiten/v2/audio#InfiniteLoop) doesn't do any fading between end and start loop points nor requires any padding after the end loop point. See also [apps/loop_finder](https://github.com/tinne26/edau/tree/main/apps) for a loop point finder utility.
 - A handful of low-level helper functions for audio streams and samples.
 
 ## General advice for audio in Ebitengine
@@ -21,7 +21,7 @@ Current utilities include:
 Future plans include:
 - Transitions for effects and the speed shifter. This is currently an open problem that I'm still trying to figure out, as applying transitions as early as possible leads to inconsistent transition timing, and trying to apply a consistent latency seems tricky (if possible at all).
 - Better support for `.ogg` and a mono player, mostly intended for SFX's and saving some space.
-- Effects and effects chains, with programmable and automatable parameters and a simple descriptive UI model to be able to integrate plugins into a DAW-like program.
+- Effects and effect chains, with programmable and automatable parameters and a simple descriptive UI model to be able to integrate plugins into a DAW-like program.
 - A few audio synths. Maybe even some light format to create SFX's programmatically.
 - Maybe more sophisticate loopers for more complex song structures with repetitions and multiple sections, though this can already be built on top of the existing looper.
 
