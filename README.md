@@ -23,7 +23,8 @@ Future plans include:
 - Better support for `.ogg` and a mono player, mostly intended for SFX's and saving some space.
 - Effects and effect chains, with programmable and automatable parameters and a simple descriptive UI model to be able to integrate plugins into a DAW-like program.
 - A few audio synths. Maybe even some light format to create SFX's programmatically.
-- Maybe more sophisticate loopers for more complex song structures with repetitions and multiple sections, though this can already be built on top of the existing looper.
+- Maybe more sophisticated loopers for more complex song structures with repetitions and multiple sections, though this can already be built on top of the existing looper.
 
 ## See also...
 - SolarLune's [resound](https://github.com/SolarLune/resound) library, which already includes multiple effects like volume, delay, low-pass filtering, panning, distortion, etc.
+- [Transition](https://github.com/tinne26/transition), my incomplete 2023 Ebitengine game jam entry. The code on `src/audio` implements `float32` processing chains for truly smooth transitions (both fades and crossfades) and mixing multiple audio sources.
